@@ -21,3 +21,5 @@ void schedule_threads();
 void yield();
 
 void finish_thread();
+
+void thread_helper(void (*fun_ptr)(void*), void* parameter);

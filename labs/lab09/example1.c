@@ -38,7 +38,7 @@ int main()
   getcontext(&child);
 
   // Modify the context to a new stack
-  child.uc_link = 0;
+  child.uc_link = 0; 
   child.uc_stack.ss_sp = malloc(THREAD_STACK_SIZE);
   child.uc_stack.ss_size = THREAD_STACK_SIZE;
   child.uc_stack.ss_flags = 0;
@@ -50,7 +50,7 @@ int main()
 
   // Create the new context
   printf("Creating child thread\n");
-  makecontext(&child, &threadFunction, 0);
+  makecontext(&child, &threadFunction, 0); 
 
   // Execute the child context
   printf("Switching to child thread\n");

@@ -16,6 +16,8 @@ these functions here in the .c file rather than the header.
 
 // 64kB stack
 #define THREAD_STACK_SIZE 1024*64
+ucontext_t child, parent;
+bool child_done;
 
 /*
    max number of threads
@@ -34,6 +36,9 @@ these functions here in the .c file rather than the header.
 
 // storage for your thread data
 ucontext_t threads[MAX_THREADS];
+bool thread_ready[MAX_THREADS];
+int thread_count = 0;
+int current_thread = 0;
 
 
 // add additional constants and globals here as you need
@@ -59,7 +64,13 @@ ucontext_t threads[MAX_THREADS];
 
 */
 void initialize_basic_threads() {
-
+   //reset globals here
+   child_done = false;
+   thread_count = 0;
+   current_thread = 0;
+   for(int i = 0; i < MAX_THREADS; i++) {
+      thread_ready[i] = false;
+   }
 }
 
 /*
@@ -94,7 +105,7 @@ create_new_thread(thread_function());
 
 */
 void create_new_thread(void (*fun_ptr)()) {
-
+   create_new_parameterized_thread(fun_ptr, NULL);
 }
 
 
@@ -125,7 +136,38 @@ schedule_threads();
 */
 
 void create_new_parameterized_thread(void (*fun_ptr)(void*), void* parameter) {
-
+   //you can pass an arbitrary number of parameters to a thread
+   if (thread_count >= MAX_THREADS){
+      // perror("Max number of threads reached, searching for empty thread\n");
+      printf("Max number of threads reached, searching for empty thread\n");
+      thread_count = 0;
+      for(int i = 0; i < MAX_THREADS; i++) {
+         if(thread_ready[i] == true) {
+            thread_count++;
+         }
+         else{
+            break;
+         }
+      }
+   }
+   if(thread_ready[thread_count] == false) {
+      getcontext(&threads[thread_count]);
+      threads[thread_count].uc_link = 0;
+      threads[thread_count].uc_stack.ss_sp = malloc(THREAD_STACK_SIZE);
+      threads[thread_count].uc_stack.ss_size = THREAD_STACK_SIZE;
+      threads[thread_count].uc_stack.ss_flags = 0;
+      if (threads[thread_count].uc_stack.ss_sp == 0){
+         perror("malloc: Could not allocate stack");
+         exit(1);
+      }
+      //pass thread_helper function as the function to run
+      //for the parameters for thread_helper, pass the function to run and the parameter 
+      makecontext(&threads[thread_count], (void (*)(void))thread_helper, 2, fun_ptr, parameter);
+      thread_ready[thread_count] = true; //thread is ready to run
+      thread_count++;
+   }
+   else {
+      perror("Thread already exists\n");}
 }
 
 
@@ -161,6 +203,20 @@ void create_new_parameterized_thread(void (*fun_ptr)(void*), void* parameter) {
    printf("All threads finished");
    */
 void schedule_threads() {
+   while(!child_done){
+      if(thread_ready[current_thread]){
+         // printf("Thread %d running\n", current_thread);
+         swapcontext(&parent, &threads[current_thread]);
+      }
+      if(!thread_ready[current_thread]){
+         printf("Thread %d finished\n", current_thread);
+         free(threads[current_thread].uc_stack.ss_sp);
+      }
+      current_thread++;
+      if(current_thread >= thread_count) current_thread = 0;
+   }
+   printf("All threads finished\n");
+
 
 }
 
@@ -204,7 +260,12 @@ finish_thread();
 
 */
 void yield() {
-
+   // printf("Child %d yielding\n", current_thread);
+   //save current thread context
+   // getcontext(&threads[current_thread]);
+   //swap from current thread to parent
+   swapcontext(&threads[current_thread], &parent);
+ 
 }
 
 /*
@@ -232,5 +293,23 @@ printf("If this lines prints, finish thread is broken\n");
 
 */
 void finish_thread() {
+   thread_ready[current_thread] = false;
+   for(int i = 0; i < thread_count; i++){
+      if (thread_ready[i]){
+         child_done = false;
+         break;
+      }
+      child_done = true;
+   }
+   printf("Child %d finished\n", current_thread);
+   swapcontext(&threads[current_thread], &parent);
 
+}
+
+
+//create helper function that makecontext can call that takes 2 parameters, the thread function and the void point parameter
+//This is so that finish_thread can be called from the thread function
+void thread_helper(void(*fun_ptr)(), void* parameter){
+   fun_ptr(parameter);
+   finish_thread();
 }
