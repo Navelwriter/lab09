@@ -37,6 +37,8 @@ bool child_done;
 // storage for your thread data
 ucontext_t threads[MAX_THREADS];
 bool thread_ready[MAX_THREADS];
+bool thread_done[MAX_THREADS];
+
 int thread_count = 0;
 int current_thread = 0;
 
@@ -70,6 +72,7 @@ void initialize_basic_threads() {
    current_thread = 0;
    for(int i = 0; i < MAX_THREADS; i++) {
       thread_ready[i] = false;
+      thread_done[i] = false;
    }
 }
 
@@ -142,7 +145,7 @@ void create_new_parameterized_thread(void (*fun_ptr)(void*), void* parameter) {
       printf("Max number of threads reached, searching for empty thread\n");
       thread_count = 0;
       for(int i = 0; i < MAX_THREADS; i++) {
-         if(thread_ready[i] == true) {
+         if(thread_ready[i]) {
             thread_count++;
          }
          else{
@@ -151,6 +154,7 @@ void create_new_parameterized_thread(void (*fun_ptr)(void*), void* parameter) {
       }
    }
    if(thread_ready[thread_count] == false) {
+      printf("Creating new thread %d\n", thread_count);
       getcontext(&threads[thread_count]);
       threads[thread_count].uc_link = 0;
       threads[thread_count].uc_stack.ss_sp = malloc(THREAD_STACK_SIZE);
@@ -204,11 +208,14 @@ void create_new_parameterized_thread(void (*fun_ptr)(void*), void* parameter) {
    */
 void schedule_threads() {
    while(!child_done){
-      if(thread_ready[current_thread]){
+      if(thread_ready[current_thread] && !thread_done[current_thread]){
          // printf("Thread %d running\n", current_thread);
          swapcontext(&parent, &threads[current_thread]);
       }
-      if(!thread_ready[current_thread]){
+      //free the memory of the thread
+      if(thread_ready[current_thread] && thread_done[current_thread]){
+         thread_ready[current_thread] = false;
+         thread_done[current_thread] = false;
          printf("Thread %d finished\n", current_thread);
          free(threads[current_thread].uc_stack.ss_sp);
       }
@@ -293,9 +300,9 @@ printf("If this lines prints, finish thread is broken\n");
 
 */
 void finish_thread() {
-   thread_ready[current_thread] = false;
+   thread_done[current_thread] = true;
    for(int i = 0; i < thread_count; i++){
-      if (thread_ready[i]){
+      if (!thread_done[i] && thread_ready[i]){
          child_done = false;
          break;
       }
